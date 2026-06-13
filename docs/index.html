@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CooLM - Rooftop Pigeon AI</title>
+    <!-- Premium Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --chat-bg: rgba(22, 26, 37, 0.65);
+            --primary: #e06d6d; /* Warm glowing red/pink */
+            --primary-hover: #f18282;
+            --text-dark: #f0f2f5;
+            --text-light: #94a3b8;
+            --user-bubble: linear-gradient(135deg, #38bdf8, #0284c7); /* Sky blue gradient */
+            --coo-bubble: rgba(255, 255, 255, 0.05);
+            --coo-border: rgba(255, 255, 255, 0.07);
+            --border: rgba(255, 255, 255, 0.08);
+            --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --glow: 0 0 15px rgba(224, 109, 109, 0.4);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(224, 109, 109, 0.08) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(56, 189, 248, 0.06) 0px, transparent 50%);
+            color: var(--text-dark);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: var(--chat-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            height: 92vh;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+            background-color: rgba(17, 20, 28, 0.4);
+            z-index: 10;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        header img.logo {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--primary);
+            box-shadow: var(--glow);
+            animation: pulseGlow 3s infinite ease-in-out;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ffffff 60%, #e06d6d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            margin: 4px 0 0;
+            font-size: 0.85rem;
+            color: var(--text-light);
+            font-weight: 400;
+        }
+
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background-color: #4ade80;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #4ade80;
+            animation: blinker 1.5s infinite;
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background-color: rgba(11, 12, 16, 0.15);
+            scroll-behavior: smooth;
+        }
+
+        .chat-box::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-box::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 14px 18px;
+            border-radius: 16px;
+            font-size: 0.98rem;
+            line-height: 1.45;
+            animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--user-bubble);
+            color: #ffffff;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+        }
+
+        .message.coo {
+            align-self: flex-start;
+            background-color: var(--coo-bubble);
+            border: 1px solid var(--coo-border);
+            color: var(--text-dark);
+            border-bottom-left-radius: 4px;
+        }
+
+        .system-msg {
+            align-self: center;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        /* Suggestion Prompts Section */
+        .suggestions-container {
+            padding: 0 24px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .suggestions-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-light);
+            font-weight: 600;
+        }
+
+        .suggestions {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: none; /* Firefox */
+        }
+
+        .suggestions::-webkit-scrollbar {
+            display: none; /* Chrome/Safari */
+        }
+
+        .suggestion-pill {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            color: #cbd5e1;
+            padding: 8px 14px;
+            border-radius: 18px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .suggestion-pill:hover {
+            background: rgba(224, 109, 109, 0.1);
+            border-color: var(--primary);
+            color: #ffffff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(224, 109, 109, 0.1);
+        }
+
+        .input-area {
+            display: flex;
+            padding: 20px 24px 24px;
+            border-top: 1px solid var(--border);
+            background: rgba(17, 20, 28, 0.4);
+            gap: 12px;
+            align-items: center;
+        }
+
+        .input-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-area input {
+            width: 100%;
+            padding: 14px 20px;
+            background: rgba(11, 12, 16, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            font-size: 0.95rem;
+            color: #ffffff;
+            outline: none;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .input-area input:focus {
+            border-color: var(--primary);
+            background: rgba(11, 12, 16, 0.5);
+            box-shadow: 0 0 0 3px rgba(224, 109, 109, 0.15);
+        }
+
+        .input-area button {
+            background: linear-gradient(135deg, var(--primary), #c95151);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 28px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: var(--glow);
+            font-family: inherit;
+        }
+
+        .input-area button:hover {
+            background: linear-gradient(135deg, var(--primary-hover), #d46a6a);
+            transform: translateY(-1px);
+            box-shadow: 0 0 20px rgba(224, 109, 109, 0.6);
+        }
+
+        .input-area button:active {
+            transform: translateY(1px);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 10px rgba(224, 109, 109, 0.3); border-color: var(--primary); }
+            50% { box-shadow: 0 0 22px rgba(224, 109, 109, 0.75); border-color: #ff9191; }
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0.4; }
+        }
+
+        /* Loading Dots styling */
+        .typing {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 16px 20px !important;
+        }
+
+        .typing .dot {
+            width: 7px;
+            height: 7px;
+            background: var(--text-light);
+            border-radius: 50%;
+            animation: blink 1.4s infinite both;
+        }
+        .typing .dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing .dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes blink {
+            0% { opacity: 0.2; transform: scale(0.9); }
+            20% { opacity: 1; transform: scale(1.1); }
+            100% { opacity: 0.2; transform: scale(0.9); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="brand">
+                    <img src="assets/coolm.png" alt="CooLM Logo" class="logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'54\' height=\'54\'><rect width=\'54\' height=\'54\' fill=\'%23d46a6a\'/><text x=\'50%\' y=\'50%\' fill=\'white\' font-size=\'22\' font-weight=\'bold\' font-family=\'sans-serif\' text-anchor=\'middle\' dy=\'.3em\'>C</text></svg>'">
+                    <div>
+                        <h1>CooLM</h1>
+                        <p>A ~42M parameter local LLM trained on RTX 4060</p>
+                    </div>
+                </div>
+                <div class="server-status">
+                    <span class="status-dot"></span>
+                    <span>Active Engine</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="chat-box" id="chatBox">
+            <div class="message system-msg">
+                Model running locally via Python server (ONNX Inference).
+            </div>
+            <div class="message coo">
+                coo. i am a pigeon on a roof. what do you want.
+            </div>
+        </div>
+
+        <div class="suggestions-container">
+            <div class="suggestions-label">Try asking coo</div>
+            <div class="suggestions">
+                <div class="suggestion-pill" onclick="sendSuggestion('why do humans honk so much')">why do humans honk so much</div>
+                <div class="suggestion-pill" onclick="sendSuggestion('is the street cat still prowling')">is the street cat still prowling</div>
+                <div class="suggestion-pill" onclick="sendSuggestion('where do you find sunflower seeds')">where do you find sunflower seeds</div>
+                <div class="suggestion-pill" onclick="sendSuggestion('tell me about the hot sun')">tell me about the hot sun</div>
+                <div class="suggestion-pill" onclick="sendSuggestion('are green parrots noisy')">are green parrots noisy</div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <input type="text" id="userInput" placeholder="Say something to Coo..." autocomplete="off" onkeypress="handleKeyPress(event)">
+            </div>
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const userInput = document.getElementById('userInput');
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            div.textContent = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return div;
+        }
+
+        function showTyping() {
+            const div = document.createElement('div');
+            div.className = 'message coo typing';
+            div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return div;
+        }
+
+        async function triggerInference(text, typingIndicator) {
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Server response wasn't OK");
+                }
+                
+                const data = await response.json();
+                chatBox.removeChild(typingIndicator);
+                addMessage(data.response, 'coo');
+            } catch (e) {
+                chatBox.removeChild(typingIndicator);
+                addMessage("coo (error): " + e.message + ". Make sure you started the local server using chat.bat!", 'coo');
+            }
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            userInput.value = '';
+            
+            const typingIndicator = showTyping();
+            await triggerInference(text, typingIndicator);
+        }
+
+        async function sendSuggestion(text) {
+            addMessage(text, 'user');
+            const typingIndicator = showTyping();
+            await triggerInference(text, typingIndicator);
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+    </script>
+</body>
+</html>

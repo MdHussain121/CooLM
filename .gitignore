@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyTorch
+*.pt
+*.pth
+
+# Data and Checkpoints
+data/
+checkpoints/
+*.jsonl
+
+# IDEs
+.vscode/
+.idea/
+
+# Environment
+.env
+venv/
+env/
+
+# ONNX Models
+*.onnx
+docs/*.onnx
