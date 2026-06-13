@@ -1,14 +1,3 @@
----
-license: mit
-language:
-- en
-tags:
-- text-generation
-- pytorch
-- onnx
-- tiny-lm
-- custom-architecture
----
 
 <p align="center">
   <img src="assets/coolm.png" alt="CooLM" width="400"/>

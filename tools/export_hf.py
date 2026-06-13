@@ -43,8 +43,44 @@ def push_to_hub(repo_id="username/coolm-42M", token=None):
 
     print("Uploading README.md (Model Card)...")
     if os.path.exists("README.md"):
+        import io
+        with open("README.md", "r", encoding="utf-8") as f:
+            readme_content = f.read()
+        
+        yaml_frontmatter = """---
+license: mit
+language:
+- en
+tags:
+- text-generation
+- pytorch
+- onnx
+- tiny-lm
+- custom-architecture
+- pigeon
+- rooftop-pigeon
+model-index:
+- name: CooLM-42M
+  results:
+  - task:
+      type: text-generation
+      name: Text Generation
+    dataset:
+      name: coolm-500k
+      type: MdHussain121/coolm-500k
+    metrics:
+    - type: perplexity
+      value: 1.39
+      name: Perplexity
+    - type: loss
+      value: 0.3262
+      name: Validation Loss
+---
+
+"""
+        combined_content = yaml_frontmatter + readme_content
         api.upload_file(
-            path_or_fileobj="README.md",
+            path_or_fileobj=io.BytesIO(combined_content.encode("utf-8")),
             path_in_repo="README.md",
             repo_id=repo_id
         )
