@@ -63,9 +63,6 @@ tokens processed: 8,968,042
 avg throughput: 6784 tok/s
 best val loss: 0.3262 (ppl 1.39)
 ================================================================================
-```
-
-![Training Results](assets/training_results.png)
 
 ---
 
