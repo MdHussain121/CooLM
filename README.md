@@ -99,7 +99,7 @@ Coo:
 You can run the entire pipeline or chat locally using the provided Windows batch files:
 
 - **`train_coolm.bat`**: Installs requirements, generates the 500k dataset, prepares tokenizer/tensors, and trains the model.
-- **`chat.bat`**: Spins up the optimized local Python web server and automatically opens your browser to the beautiful dark mode UI so you can chat with CooLM using the exported ONNX model.
+- **`chat.bat`**: Spins up the optimized local Python web server. It prompts you to choose between the **Hugging Face version** (downloads and caches the pre-trained weights from `MdHussain121/coolm-42M` using a robust, built-in chunked downloader) or your own **local version**. It then automatically opens your browser to the beautiful dark mode UI.
 
 #### Manual Step-by-Step Execution (No `.bat`)
 
@@ -129,7 +129,7 @@ If you prefer not to use the `.bat` files, you can execute the commands manually
    ```bash
    python -m tools.server
    ```
-   *Then open `http://localhost:8000/index.html` in your browser to chat!*
+   *The server will prompt you to choose between the Hugging Face version (Option 1) and your own local version (Option 2). Once selected, it automatically opens `http://localhost:8000/index.html` in your browser.*
 
 ---
 
@@ -184,6 +184,12 @@ assets/
 **Input Normalization:** Since the model is small and trained strictly on lowercase, unpunctuated input, `inference.py` strips punctuation and converts your prompt to lowercase automatically so it stays within the training distribution (OOD protection).
 
 **Why synthetic data?** A pigeon character with consistent personality needs consistent training data. Template composition with randomized components generates 500K samples from basic templates, balanced evenly across 13 categories.
+
+**Vocabulary Optimization:** We optimized the BPE tokenizer to train exactly 3,269 tokens, and set `vocab_size` in config to match this value exactly. This leaves 0 unused embedding parameters, saving over 1 million redundant weights and eliminating parameter bloat.
+
+**Dataset Uniqueness:** The generator script guarantees exactly 100% uniqueness across all 500,000 prompt inputs by tracking generated inputs in memory and retrying on collisions.
+
+**Early Stopping:** To prevent overfitting on the synthetic dataset, the training loop tracks validation loss and halts training automatically if validation loss does not improve for 5 consecutive evaluations (patience = 5).
 
 ---
 
