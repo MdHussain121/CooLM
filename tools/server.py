@@ -3,8 +3,48 @@ import json
 import webbrowser
 import threading
 import shutil
+import urllib.request
+import time
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from tools.onnx_chat import CooONNXInference
+
+def download_file(url, dest_path, description="File"):
+    print(f"Downloading {description} from Hugging Face...")
+    try:
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        )
+        with urllib.request.urlopen(req) as response:
+            total_size = int(response.info().get('Content-Length', 0))
+            block_size = 1024 * 1024  # 1MB chunks
+            downloaded = 0
+            
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            start_time = time.time()
+            with open(dest_path, 'wb') as f:
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    downloaded += len(buffer)
+                    f.write(buffer)
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        speed = downloaded / max((time.time() - start_time), 0.001) / (1024 * 1024)  # MB/s
+                        print(f"\rProgress: {percent:.1f}% ({downloaded/(1024*1024):.1f}MB / {total_size/(1024*1024):.1f}MB) - Speed: {speed:.2f} MB/s", end="", flush=True)
+                    else:
+                        print(f"\rDownloaded: {downloaded/(1024*1024):.1f}MB", end="", flush=True)
+            print(f"\nSuccessfully downloaded {description} to {dest_path}!")
+            return True
+    except Exception as e:
+        print(f"\nError downloading {description}: {e}")
+        if os.path.exists(dest_path):
+            try:
+                os.remove(dest_path)
+            except:
+                pass
+        return False
 
 # Initialize the inference engine once, optimized for reuse.
 print("Starting CooLM Local Web Server...")
@@ -24,38 +64,36 @@ while choice not in ("1", "2"):
 onnx_path = None
 tokenizer_path = None
 
+model_url = "https://huggingface.co/MdHussain121/coolm-42M/resolve/main/model.onnx"
+tokenizer_url = "https://huggingface.co/MdHussain121/coolm-42M/resolve/main/tokenizer.json"
+
 if choice == "1":
     # User wants Hugging Face version
-    if os.path.exists("docs/model_hf.onnx") and os.path.exists("data/tokenizer_hf.json"):
+    model_ok = os.path.exists("docs/model_hf.onnx")
+    tokenizer_ok = os.path.exists("data/tokenizer_hf.json")
+    
+    if model_ok and tokenizer_ok:
         print("Using cached Hugging Face version.")
+    else:
+        print("Hugging Face model files not found locally.")
+        if not model_ok:
+            model_ok = download_file(model_url, "docs/model_hf.onnx", "CooLM ONNX model")
+        if not tokenizer_ok:
+            tokenizer_ok = download_file(tokenizer_url, "data/tokenizer_hf.json", "CooLM Tokenizer")
+            
+    if model_ok and tokenizer_ok:
         onnx_path = "docs/model_hf.onnx"
         tokenizer_path = "data/tokenizer_hf.json"
     else:
-        print("Hugging Face model files not found locally.")
-        try:
-            from huggingface_hub import hf_hub_download
-            print("Downloading model.onnx from Hugging Face...")
-            cached_model = hf_hub_download(repo_id="MdHussain121/coolm-42M", filename="model.onnx")
-            print("Downloading tokenizer.json from Hugging Face...")
-            cached_tokenizer = hf_hub_download(repo_id="MdHussain121/coolm-42M", filename="tokenizer.json")
-            
-            os.makedirs("docs", exist_ok=True)
-            os.makedirs("data", exist_ok=True)
-            shutil.copy(cached_model, "docs/model_hf.onnx")
-            shutil.copy(cached_tokenizer, "data/tokenizer_hf.json")
-            print("Successfully downloaded Hugging Face model!")
-            onnx_path = "docs/model_hf.onnx"
-            tokenizer_path = "data/tokenizer_hf.json"
-        except Exception as e:
-            print(f"\nError downloading Hugging Face model: {e}")
-            if os.path.exists("docs/model.onnx") and os.path.exists("data/tokenizer.json"):
-                print("Falling back to local version...")
-                onnx_path = "docs/model.onnx"
-                tokenizer_path = "data/tokenizer.json"
-            else:
-                print("No local model found. Cannot start server.")
-                input("Press Enter to exit...")
-                exit(1)
+        print("\nError: Failed to obtain Hugging Face model/tokenizer files.")
+        if os.path.exists("docs/model.onnx") and os.path.exists("data/tokenizer.json"):
+            print("Falling back to local version...")
+            onnx_path = "docs/model.onnx"
+            tokenizer_path = "data/tokenizer.json"
+        else:
+            print("No local model found. Cannot start server.")
+            input("Press Enter to exit...")
+            exit(1)
 else:
     # User wants Local version
     if os.path.exists("docs/model.onnx") and os.path.exists("data/tokenizer.json"):
@@ -65,23 +103,13 @@ else:
         print("\nError: Local model (docs/model.onnx) or tokenizer (data/tokenizer.json) not found.")
         fallback = input("Would you like to download and use the Hugging Face version instead? (y/n): ").strip().lower()
         if fallback in ('y', 'yes'):
-            try:
-                from huggingface_hub import hf_hub_download
-                print("Downloading model.onnx from Hugging Face...")
-                cached_model = hf_hub_download(repo_id="MdHussain121/coolm-42M", filename="model.onnx")
-                print("Downloading tokenizer.json from Hugging Face...")
-                cached_tokenizer = hf_hub_download(repo_id="MdHussain121/coolm-42M", filename="tokenizer.json")
-                
-                os.makedirs("docs", exist_ok=True)
-                os.makedirs("data", exist_ok=True)
-                shutil.copy(cached_model, "docs/model_hf.onnx")
-                shutil.copy(cached_tokenizer, "data/tokenizer_hf.json")
-                print("Successfully downloaded Hugging Face model!")
+            model_ok = download_file(model_url, "docs/model_hf.onnx", "CooLM ONNX model")
+            tokenizer_ok = download_file(tokenizer_url, "data/tokenizer_hf.json", "CooLM Tokenizer")
+            if model_ok and tokenizer_ok:
                 onnx_path = "docs/model_hf.onnx"
                 tokenizer_path = "data/tokenizer_hf.json"
-            except Exception as e:
-                print(f"Error downloading Hugging Face model: {e}")
-                print("Cannot start server.")
+            else:
+                print("Failed to download Hugging Face model files. Cannot start server.")
                 input("Press Enter to exit...")
                 exit(1)
         else:
