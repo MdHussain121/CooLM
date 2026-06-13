@@ -49,11 +49,24 @@ def push_to_hub(repo_id="username/coolm-42M", token=None):
             repo_id=repo_id
         )
 
+    print("Uploading assets...")
+    if os.path.exists("assets"):
+        for f in os.listdir("assets"):
+            file_path = os.path.join("assets", f)
+            if os.path.isfile(file_path):
+                print(f"Uploading asset: {f}...")
+                api.upload_file(
+                    path_or_fileobj=file_path,
+                    path_in_repo=f"assets/{f}",
+                    repo_id=repo_id
+                )
+
     print("Done! Model pushed to HuggingFace.")
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo_id", type=str, default="your_username/coolm-42M", help="HuggingFace repo ID")
+    parser.add_argument("--token", type=str, default=None, help="HuggingFace token")
     args = parser.parse_args()
-    push_to_hub(repo_id=args.repo_id)
+    push_to_hub(repo_id=args.repo_id, token=args.token)
