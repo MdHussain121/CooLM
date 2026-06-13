@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CooLM - Rooftop Pigeon AI</title>
+    <meta name="description" content="CooLM: A 42M parameter tiny language model that talks like a rooftop pigeon. Runs completely locally in your browser using ONNX.">
     <!-- Premium Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -26,7 +27,9 @@
             background-color: var(--bg-color);
             background-image: 
                 radial-gradient(at 10% 20%, rgba(224, 109, 109, 0.08) 0px, transparent 50%),
-                radial-gradient(at 90% 80%, rgba(56, 189, 248, 0.06) 0px, transparent 50%);
+                radial-gradient(at 90% 80%, rgba(56, 189, 248, 0.06) 0px, transparent 50%),
+                url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 25 a4 4 0 0 1 4-4 a6 6 0 0 1 8 2 a4 4 0 0 1 4 3 a4 4 0 0 1 -3 4 h -10 a3 3 0 0 1 -3 -5 z' fill='%23ffffff' fill-opacity='0.02'/><path d='M55 45 c3-3 7-1 10 1 c1 1 3 0 4-1 c1-1 2-1 3 0 c0 1 0 2-1 3 c-2 2 -4 2 -6 0 c-1 1 -3 3 -3 5 h-5 c0-2 -1-4 -3-5 c-1-1 -3-2 -3-3 c0-1 1-2 3-2 z' fill='%23ffffff' fill-opacity='0.02'/><path d='M25 85 c3-3 10-6 16-3 c-3 3 -6 10 -16 3 z' fill='%23ffffff' fill-opacity='0.02'/><path d='M85 95 c1-2 4-2 5 0 c-1 2 -4 2 -5 0 z' fill='%23ffffff' fill-opacity='0.02'/><path d='M95 25 l10 8 l10 -8' stroke='%23ffffff' stroke-width='1.2' fill='none' stroke-opacity='0.02'/><circle cx='15' cy='95' r='1.5' fill='%23ffffff' fill-opacity='0.02'/><circle cx='105' cy='65' r='1' fill='%23ffffff' fill-opacity='0.02'/><circle cx='65' cy='15' r='1' fill='%23ffffff' fill-opacity='0.02'/></svg>");
+            background-repeat: repeat;
             color: var(--text-dark);
             font-family: var(--font-family);
             margin: 0;
@@ -36,6 +39,7 @@
             align-items: center;
             height: 100vh;
             overflow: hidden;
+            position: relative;
         }
 
         .container {
@@ -181,10 +185,62 @@
             text-align: center;
         }
 
-        /* Suggestion Prompts Section */
-        .suggestions-container {
+        /* Sidebars for desktop floating suggestions */
+        .suggestions-sidebar {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: calc(50vw - 360px);
+            max-width: 300px;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .suggestions-sidebar.left {
+            left: 20px;
+        }
+
+        .suggestions-sidebar.right {
+            right: 20px;
+        }
+
+        .floating-pill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: rgba(22, 26, 37, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            color: #cbd5e1;
+            padding: 8px 14px;
+            border-radius: 18px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            white-space: nowrap;
+            /* No transform transitions to prevent physics conflict */
+            transition: opacity 0.5s ease-in-out, background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+            pointer-events: auto;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+        }
+
+        .floating-pill.visible {
+            opacity: 1;
+        }
+
+        .floating-pill:hover {
+            background: rgba(224, 109, 109, 0.15);
+            border-color: var(--primary);
+            color: #ffffff;
+            box-shadow: 0 6px 18px rgba(224, 109, 109, 0.35);
+        }
+
+        /* Mobile fallback suggestions (inside the chat card) */
+        .mobile-suggestions {
+            display: none;
             padding: 0 24px 12px;
-            display: flex;
             flex-direction: column;
             gap: 8px;
         }
@@ -199,34 +255,49 @@
 
         .suggestions {
             display: flex;
-            gap: 8px;
-            overflow-x: auto;
+            flex-wrap: wrap;
+            gap: 6px;
+            max-height: 105px;
+            overflow-y: auto;
             padding-bottom: 4px;
-            scrollbar-width: none; /* Firefox */
         }
 
         .suggestions::-webkit-scrollbar {
-            display: none; /* Chrome/Safari */
+            width: 4px;
+        }
+
+        .suggestions::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
         }
 
         .suggestion-pill {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--border);
             color: #cbd5e1;
-            padding: 8px 14px;
-            border-radius: 18px;
-            font-size: 0.82rem;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.78rem;
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .suggestion-pill:hover {
-            background: rgba(224, 109, 109, 0.1);
+            background: rgba(224, 109, 109, 0.15);
             border-color: var(--primary);
             color: #ffffff;
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(224, 109, 109, 0.1);
+        }
+
+        @media (max-width: 1050px) {
+            .mobile-suggestions {
+                display: flex;
+            }
+            .suggestions-sidebar {
+                display: none;
+            }
         }
 
         .input-area {
@@ -328,6 +399,8 @@
     </style>
 </head>
 <body>
+    <div class="suggestions-sidebar left" id="suggestionsLeft"></div>
+    <div class="suggestions-sidebar right" id="suggestionsRight"></div>
 
     <div class="container">
         <header>
@@ -336,7 +409,7 @@
                     <img src="assets/coolm.png" alt="CooLM Logo" class="logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'54\' height=\'54\'><rect width=\'54\' height=\'54\' fill=\'%23d46a6a\'/><text x=\'50%\' y=\'50%\' fill=\'white\' font-size=\'22\' font-weight=\'bold\' font-family=\'sans-serif\' text-anchor=\'middle\' dy=\'.3em\'>C</text></svg>'">
                     <div>
                         <h1>CooLM</h1>
-                        <p>A ~42M parameter local LLM trained on RTX 4060</p>
+                        <p>A ~42M parameter rooftop pigeon LLM running locally via ONNX.</p>
                     </div>
                 </div>
                 <div class="server-status">
@@ -355,14 +428,10 @@
             </div>
         </div>
 
-        <div class="suggestions-container">
+        <div class="mobile-suggestions">
             <div class="suggestions-label">Try asking coo</div>
-            <div class="suggestions">
-                <div class="suggestion-pill" onclick="sendSuggestion('why do humans honk so much')">why do humans honk so much</div>
-                <div class="suggestion-pill" onclick="sendSuggestion('is the street cat still prowling')">is the street cat still prowling</div>
-                <div class="suggestion-pill" onclick="sendSuggestion('where do you find sunflower seeds')">where do you find sunflower seeds</div>
-                <div class="suggestion-pill" onclick="sendSuggestion('tell me about the hot sun')">tell me about the hot sun</div>
-                <div class="suggestion-pill" onclick="sendSuggestion('are green parrots noisy')">are green parrots noisy</div>
+            <div class="suggestions" id="mobileSuggestionsList">
+                <!-- Populated dynamically via JS -->
             </div>
         </div>
 
@@ -439,6 +508,246 @@
                 sendMessage();
             }
         }
+
+        const ALL_PROMPTS = [
+            "why do humans honk so much",
+            "is the street cat still prowling",
+            "where do you find sunflower seeds",
+            "tell me about the hot sun",
+            "are green parrots noisy",
+            "where is your favorite perch",
+            "are you afraid of eagles",
+            "what is in the garbage bin",
+            "can we share some bread crumbs",
+            "is the street dog friendly",
+            "tell me about your cozy nest",
+            "why do you fly at sunset",
+            "did it rain today",
+            "why do monkeys steal food",
+            "how do you dry your feathers",
+            "is the cement hot on your feet",
+            "tell me a story about a crow",
+            "where is the tallest building",
+            "do you like the monsoon rain",
+            "why are rickshaws so loud",
+            "can you see the whole city from up there",
+            "where do you go when it storms",
+            "have you met the local sparrow flock",
+            "what does bread taste like",
+            "is it safe to sit on wires"
+        ];
+
+        function displayFloatingPrompts() {
+            const leftSidebar = document.getElementById('suggestionsLeft');
+            const rightSidebar = document.getElementById('suggestionsRight');
+            const mobileContainer = document.getElementById('mobileSuggestionsList');
+            
+            if (!leftSidebar || !rightSidebar) return;
+            
+            // Staggered fade out of old pills
+            const oldPills = [...floatingPills];
+            floatingPills = []; // clear the physics array
+            
+            oldPills.forEach(pillObj => {
+                pillObj.element.classList.remove('visible');
+                setTimeout(() => {
+                    pillObj.element.remove();
+                }, 500);
+            });
+            
+            // Shuffle the prompts array
+            const shuffled = [...ALL_PROMPTS].sort(() => 0.5 - Math.random());
+            
+            // Desktop: Select 4 for left, 4 for right
+            const leftSelection = shuffled.slice(0, 4);
+            const rightSelection = shuffled.slice(4, 8);
+            
+            // Mobile: Select 3 for mobile scroll
+            const mobileSelection = shuffled.slice(8, 11);
+            
+            // Staggered render to look elegant
+            leftSelection.forEach((prompt, idx) => {
+                createFloatingPill(prompt, leftSidebar, 'left', idx);
+            });
+            
+            rightSelection.forEach((prompt, idx) => {
+                createFloatingPill(prompt, rightSidebar, 'right', idx);
+            });
+            
+            // Render Mobile Inline
+            if (mobileContainer) {
+                mobileContainer.innerHTML = '';
+                mobileSelection.forEach(prompt => {
+                    const div = document.createElement('div');
+                    div.className = 'suggestion-pill';
+                    div.textContent = prompt;
+                    div.onclick = () => sendSuggestion(prompt);
+                    mobileContainer.appendChild(div);
+                });
+            }
+        }
+
+        function createFloatingPill(prompt, container, side, index) {
+            const pill = document.createElement('div');
+            pill.className = 'floating-pill';
+            pill.textContent = prompt;
+            pill.onclick = () => sendSuggestion(prompt);
+            
+            container.appendChild(pill);
+            
+            // Measure actual size (or fall back to defaults)
+            const w = pill.offsetWidth || 150;
+            const h = pill.offsetHeight || 38;
+            
+            const limitX = container.clientWidth || 200;
+            const limitY = container.clientHeight || 600;
+            
+            // Calculate a staggered Y position band to avoid initial overlap
+            const bandHeight = (limitY - 150) / 4;
+            const minTop = 75 + (index * bandHeight);
+            const maxTop = minTop + bandHeight - h - 5;
+            const startY = Math.random() * (maxTop - minTop) + minTop;
+            const startX = Math.random() * (limitX - w - 10);
+            
+            // Random slow velocity
+            const vx = (Math.random() * 0.2 + 0.15) * (Math.random() < 0.5 ? 1 : -1);
+            const vy = (Math.random() * 0.2 + 0.15) * (Math.random() < 0.5 ? 1 : -1);
+            
+            pill.style.transform = `translate3d(${startX}px, ${startY}px, 0)`;
+            
+            const pillObj = {
+                element: pill,
+                x: startX,
+                y: startY,
+                vx: vx,
+                vy: vy,
+                w: w,
+                h: h,
+                sidebar: side
+            };
+            
+            floatingPills.push(pillObj);
+            
+            // Trigger fade-in
+            setTimeout(() => {
+                pill.classList.add('visible');
+            }, 100 + (index * 150));
+        }
+
+        let floatingPills = []; // array of { element, x, y, vx, vy, w, h, sidebar }
+
+        function updatePhysics() {
+            const sidebars = {
+                'left': document.getElementById('suggestionsLeft'),
+                'right': document.getElementById('suggestionsRight')
+            };
+            
+            // Group active pills by sidebar
+            const groups = { 'left': [], 'right': [] };
+            floatingPills.forEach(pill => {
+                if (pill.element.parentNode) {
+                    groups[pill.sidebar].push(pill);
+                }
+            });
+
+            for (let side in groups) {
+                const pills = groups[side];
+                const sidebar = sidebars[side];
+                if (!sidebar) continue;
+                
+                const limitX = sidebar.clientWidth || 200;
+                const limitY = sidebar.clientHeight || 600;
+
+                // 1. Update positions and boundaries
+                pills.forEach(pill => {
+                    // Update dimensions if not measured yet
+                    if (pill.w === 0 || pill.w === 150) {
+                        pill.w = pill.element.offsetWidth || 150;
+                        pill.h = pill.element.offsetHeight || 38;
+                    }
+
+                    pill.x += pill.vx;
+                    pill.y += pill.vy;
+
+                    // Bounce X
+                    if (pill.x < 0) {
+                        pill.x = 0;
+                        pill.vx = Math.abs(pill.vx);
+                    } else if (pill.x + pill.w > limitX) {
+                        pill.x = limitX - pill.w;
+                        pill.vx = -Math.abs(pill.vx);
+                    }
+
+                    // Bounce Y
+                    if (pill.y < 40) {
+                        pill.y = 40;
+                        pill.vy = Math.abs(pill.vy);
+                    } else if (pill.y + pill.h > limitY - 40) {
+                        pill.y = limitY - 40 - pill.h;
+                        pill.vy = -Math.abs(pill.vy);
+                    }
+
+                    // Apply translation
+                    pill.element.style.transform = `translate3d(${pill.x}px, ${pill.y}px, 0)`;
+                });
+
+                // 2. AABB Collisions resolution
+                for (let i = 0; i < pills.length; i++) {
+                    for (let j = i + 1; j < pills.length; j++) {
+                        const p1 = pills[i];
+                        const p2 = pills[j];
+
+                        // AABB Overlap check
+                        if (p1.x < p2.x + p2.w &&
+                            p1.x + p1.w > p2.x &&
+                            p1.y < p2.y + p2.h &&
+                            p1.y + p1.h > p2.y) {
+                            
+                            // Calculate overlap vector
+                            const overlapX = Math.min(p1.x + p1.w, p2.x + p2.w) - Math.max(p1.x, p2.x);
+                            const overlapY = Math.min(p1.y + p1.h, p2.y + p2.h) - Math.max(p1.y, p2.y);
+
+                            if (overlapX < overlapY) {
+                                // Resolve X axis
+                                const push = overlapX / 2;
+                                if (p1.x + p1.w / 2 < p2.x + p2.w / 2) {
+                                    p1.x -= push;
+                                    p2.x += push;
+                                } else {
+                                    p1.x += push;
+                                    p2.x -= push;
+                                }
+                                // Elastic bounce swap
+                                const temp = p1.vx;
+                                p1.vx = p2.vx;
+                                p2.vx = temp;
+                            } else {
+                                // Resolve Y axis
+                                const push = overlapY / 2;
+                                if (p1.y + p1.h / 2 < p2.y + p2.h / 2) {
+                                    p1.y -= push;
+                                    p2.y += push;
+                                } else {
+                                    p1.y += push;
+                                    p2.y -= push;
+                                }
+                                // Elastic bounce swap
+                                const temp = p1.vy;
+                                p1.vy = p2.vy;
+                                p2.vy = temp;
+                            }
+                        }
+                    }
+                }
+            }
+
+            requestAnimationFrame(updatePhysics);
+        }
+
+        // Initial render, set intervals, start physics loop
+        displayFloatingPrompts();
+        setInterval(displayFloatingPrompts, 30000);
+        requestAnimationFrame(updatePhysics);
     </script>
 </body>
 </html>
