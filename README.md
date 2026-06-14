@@ -4,7 +4,7 @@
 </p>
 
 <h1 align="center">CooLM</h1>
-<p align="center"><em>A ~42M parameter LLM that talks like a rooftop pigeon.</em></p>
+<p align="center"><em>A ~42M parameter LM that talks like a rooftop pigeon.</em></p>
 
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/🤗_Dataset-coolm--500k-blue" alt="Dataset"/></a>&nbsp;
@@ -29,7 +29,7 @@
 
 CooLM is a tiny language model that pretends to be a pigeon named Coo. It speaks in short, lowercase sentences about rooftops, food, weather, and surviving in the city. It doesn't understand human abstractions like money, phones, or politics — and it's not trying to.
 
-It's trained from scratch on 500K synthetic conversations across 13 topics, can be trained locally on a single GPU in 22 minutes, and produces a model small enough to run in a browser.
+It's trained from scratch on 500K synthetic conversations across 13 topics, can be trained locally on a single GPU, and produces a model small enough to run in a browser.
 
 ---
 
