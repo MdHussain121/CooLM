@@ -2,6 +2,8 @@
 
 import json
 import os
+from pathlib import Path
+
 import torch
 
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders, processors
@@ -26,8 +28,7 @@ def train_tokenizer(data_path, vocab_size=4096, output_dir="data"):
             all_text.append(sample)
 
     raw_path = os.path.join(output_dir, "raw_text.txt")
-    with open(raw_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(all_text))
+    Path(raw_path).write_text("\n".join(all_text), encoding="utf-8")
 
     tokenizer = Tokenizer(models.BPE())
     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
@@ -61,8 +62,12 @@ def tokenize_dataset(data_path, tokenizer, output_dir="data", pad_len=64):
     all_tokens = []
     all_masks = []
     total_tokens = 0
+    row_idx = 0
     with open(data_path, "r", encoding="utf-8") as f:
         for line in f:
+            if not line.strip():
+                continue
+            row_idx += 1
             obj = json.loads(line)
             user_text = obj.get("input", "")
             assistant_text = obj.get("output", "")
@@ -76,9 +81,19 @@ def tokenize_dataset(data_path, tokenizer, output_dir="data", pad_len=64):
             full_ids = input_ids + output_ids
             mask = [0] * len(input_ids) + [1] * len(output_ids)
 
+            # FIND-037: the old silent right-truncation here would keep
+            # mask=1 on truncated real tokens (the model would learn to
+            # continue without ever terminating) and delete <|im_end|>/<|eos|>.
+            # Fail loudly instead: the shipped 500K dataset maxes at 46
+            # tokens (0/500,000 over pad_len 64, audit-verified), so hitting
+            # this means non-conforming data.
             if len(full_ids) > pad_len:
-                full_ids = full_ids[:pad_len]
-                mask = mask[:pad_len]
+                raise ValueError(
+                    f"row {row_idx} encodes to {len(full_ids)} tokens which exceeds "
+                    f"pad_len {pad_len}; the shipped CooLM dataset maxes at 46 tokens "
+                    "so this indicates non-conforming data — regenerate the dataset "
+                    "or raise pad_len (silent truncation is disabled)"
+                )
 
             if len(full_ids) < pad_len:
                 n = pad_len - len(full_ids)

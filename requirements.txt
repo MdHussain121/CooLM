@@ -1,4 +1,10 @@
-torch
-tokenizers
-onnxruntime
-onnx
+# Version-range pins (FIND-015). Verified environment (2026-11-05 remediation):
+#   torch==2.13.0+cu126, tokenizers==0.22.2, onnxruntime==1.26.0,
+#   huggingface_hub==1.15.0 (onnx not import-verified in the audit env).
+# torch>=2.9 changed the default ONNX exporter; tools/model_export.py pins the
+# legacy exporter (dynamo=False), so newer torch still works.
+torch>=2.0,<3.0
+tokenizers>=0.20,<1.0
+onnxruntime>=1.17,<2.0
+onnx>=1.14,<2.0
+huggingface_hub>=0.23,<2.0

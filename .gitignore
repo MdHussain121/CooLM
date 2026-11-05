@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # PyTorch
 *.pt
@@ -23,3 +24,15 @@ env/
 # ONNX Models
 *.onnx
 docs/*.onnx
+*.provenance.json
+
+# Knowledge graph (graphify) — maintained asset, not junk (ZeroPawn precedent 2026-11-03)
+graphify-out/
+.graphify_*
+
+# Mimosa security-scan tooling state
+.mimosa/
+
+# OS junk
+Thumbs.db
+desktop.ini

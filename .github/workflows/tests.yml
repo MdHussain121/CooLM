@@ -1,0 +1,28 @@
+# Minimal CI (FIND-025). Activates when the owner pushes this branch/merges to
+# main on GitHub; nothing runs locally. CPU-only torch keeps the install small.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CPU torch first (smaller download than the CUDA default)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install remaining dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run test suite
+        run: python -m pytest tests/ -q

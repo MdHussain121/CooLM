@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CooLM - Rooftop Pigeon AI</title>
-    <meta name="description" content="CooLM: A 42M parameter tiny language model that talks like a rooftop pigeon. Runs completely locally in your browser using ONNX.">
-    <!-- Premium Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FIND-044: inference runs on the local Python server, not in the browser. -->
+    <meta name="description" content="CooLM: A 42M parameter tiny language model that talks like a rooftop pigeon. The page runs in your browser; inference runs on a local Python server via ONNX.">
+    <!-- FIND-048: inline SVG favicon (pigeon eye + beak) to avoid the /favicon.ico 404. -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%23b91c1c'/><circle cx='21' cy='12' r='3' fill='%230b0c10'/><path d='M5 18 l7 2 -7 2 z' fill='%230b0c10'/></svg>">
     <style>
         :root {
             --bg-color: #0b0c10;
@@ -15,11 +16,12 @@
             --primary-hover: #f18282;
             --text-dark: #f0f2f5;
             --text-light: #94a3b8;
-            --user-bubble: linear-gradient(135deg, #38bdf8, #0284c7); /* Sky blue gradient */
+            --user-bubble: linear-gradient(135deg, #0369a1, #075985); /* FIND-043: darkened sky-blue gradient; white text contrast 5.93:1 (start) / 7.56:1 (end) — both >= 4.5:1 */
             --coo-bubble: rgba(255, 255, 255, 0.05);
             --coo-border: rgba(255, 255, 255, 0.07);
             --border: rgba(255, 255, 255, 0.08);
-            --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            /* FIND-044: system font stack — no third-party font request. */
+            --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             --glow: 0 0 15px rgba(224, 109, 109, 0.4);
         }
 
@@ -119,6 +121,19 @@
             font-weight: 500;
         }
 
+        /* FIND-021: the badge reflects the real /health probe result. */
+        .server-status.checking {
+            background: rgba(251, 191, 36, 0.1);
+            border-color: rgba(251, 191, 36, 0.25);
+            color: #fbbf24;
+        }
+
+        .server-status.offline {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
         .status-dot {
             width: 6px;
             height: 6px;
@@ -126,6 +141,17 @@
             border-radius: 50%;
             box-shadow: 0 0 8px #4ade80;
             animation: blinker 1.5s infinite;
+        }
+
+        .status-dot.checking {
+            background-color: #fbbf24;
+            box-shadow: 0 0 8px #fbbf24;
+        }
+
+        .status-dot.offline {
+            background-color: #f87171;
+            box-shadow: 0 0 8px #f87171;
+            animation: none;
         }
 
         .chat-box {
@@ -163,7 +189,7 @@
             background: var(--user-bubble);
             color: #ffffff;
             border-bottom-right-radius: 4px;
-            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+            box-shadow: 0 4px 12px rgba(3, 105, 161, 0.25);
         }
 
         .message.coo {
@@ -214,8 +240,12 @@
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--border);
             color: #cbd5e1;
-            padding: 8px 14px;
-            border-radius: 18px;
+            /* FIND-048: >= 44px touch target (was ~29px tall). */
+            min-height: 44px;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            border-radius: 22px;
             font-size: 0.8rem;
             cursor: pointer;
             white-space: nowrap;
@@ -257,7 +287,8 @@
             display: flex;
             flex-wrap: wrap;
             gap: 6px;
-            max-height: 105px;
+            /* FIND-048: room for three 44px touch-target pills. */
+            max-height: 150px;
             overflow-y: auto;
             padding-bottom: 4px;
         }
@@ -275,8 +306,12 @@
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--border);
             color: #cbd5e1;
-            padding: 6px 12px;
-            border-radius: 16px;
+            /* FIND-048: >= 44px touch target here too. */
+            min-height: 44px;
+            padding: 10px 14px;
+            display: inline-flex;
+            align-items: center;
+            border-radius: 22px;
             font-size: 0.78rem;
             cursor: pointer;
             white-space: nowrap;
@@ -302,9 +337,15 @@
 
         .input-area {
             display: flex;
+            flex-direction: column;
             padding: 20px 24px 24px;
             border-top: 1px solid var(--border);
             background: rgba(17, 20, 28, 0.4);
+            gap: 8px;
+        }
+
+        .input-row {
+            display: flex;
             gap: 12px;
             align-items: center;
         }
@@ -335,8 +376,17 @@
             box-shadow: 0 0 0 3px rgba(224, 109, 109, 0.15);
         }
 
+        /* FIND-043: explicit placeholder color, >= 4.5:1 (computed ~7.3:1
+           against the composited dark input background). */
+        .input-area input::placeholder {
+            color: #94a3b8;
+            opacity: 1;
+        }
+
         .input-area button {
-            background: linear-gradient(135deg, var(--primary), #c95151);
+            /* FIND-043: darkened base; white text contrast 6.47:1 (start) /
+               8.31:1 (end) — both >= 4.5:1. */
+            background: linear-gradient(135deg, #b91c1c, #991b1b);
             color: white;
             border: none;
             padding: 14px 28px;
@@ -350,13 +400,62 @@
         }
 
         .input-area button:hover {
-            background: linear-gradient(135deg, var(--primary-hover), #d46a6a);
+            /* Hover stays compliant: 7.51:1 / 9.37:1 for white text. */
+            background: linear-gradient(135deg, #a32121, #8c1616);
             transform: translateY(-1px);
             box-shadow: 0 0 20px rgba(224, 109, 109, 0.6);
         }
 
         .input-area button:active {
             transform: translateY(1px);
+        }
+
+        .input-area button:disabled {
+            cursor: wait;
+            opacity: 0.7;
+            transform: none;
+        }
+
+        /* FIND-006: non-blocking hint for very long messages. */
+        .input-hint {
+            margin: 0;
+            font-size: 0.75rem;
+            color: #94a3b8; /* ~7.3:1 on the composited background */
+            padding-left: 10px;
+        }
+
+        /* FIND-023: visually-hidden utility (screen-reader only). */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* FIND-023: respect reduced-motion — kill decorative animation.
+           The JS pill physics loop checks the same media query and skips
+           its rAF updates entirely. */
+        @media (prefers-reduced-motion: reduce) {
+            .status-dot,
+            header img.logo,
+            .typing .dot,
+            .message {
+                animation: none !important;
+            }
+            .chat-box {
+                scroll-behavior: auto;
+            }
+            .input-area input,
+            .input-area button,
+            .suggestion-pill,
+            .floating-pill {
+                transition: none;
+            }
         }
 
         @keyframes fadeIn {
@@ -402,26 +501,29 @@
     <div class="suggestions-sidebar left" id="suggestionsLeft"></div>
     <div class="suggestions-sidebar right" id="suggestionsRight"></div>
 
-    <div class="container">
+    <main class="container">
         <header>
             <div class="header-content">
                 <div class="brand">
                     <img src="assets/coolm.png" alt="CooLM Logo" class="logo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'54\' height=\'54\'><rect width=\'54\' height=\'54\' fill=\'%23d46a6a\'/><text x=\'50%\' y=\'50%\' fill=\'white\' font-size=\'22\' font-weight=\'bold\' font-family=\'sans-serif\' text-anchor=\'middle\' dy=\'.3em\'>C</text></svg>'">
                     <div>
                         <h1>CooLM</h1>
-                        <p>A ~42M parameter rooftop pigeon LLM running locally via ONNX.</p>
+                        <!-- FIND-044: honest framing — the page is in the browser, inference is the local server. -->
+                        <p>A ~42M parameter rooftop pigeon LLM. This page runs in your browser; inference runs on a local Python server (ONNX).</p>
                     </div>
                 </div>
-                <div class="server-status">
-                    <span class="status-dot"></span>
-                    <span>Active Engine</span>
+                <!-- FIND-021: badge state comes from the /health probe, not a hardcoded green dot. -->
+                <div class="server-status checking" id="serverStatus" role="status" aria-live="polite">
+                    <span class="status-dot checking" id="statusDot"></span>
+                    <span id="statusLabel">Checking server…</span>
                 </div>
             </div>
         </header>
 
-        <div class="chat-box" id="chatBox">
-            <div class="message system-msg">
-                Model running locally via Python server (ONNX Inference).
+        <!-- FIND-023: chat is a screen-reader-visible log with polite live updates. -->
+        <div class="chat-box" id="chatBox" role="log" aria-live="polite" aria-label="Chat messages">
+            <div class="message system-msg" id="systemMsg">
+                Checking whether the local model server is reachable…
             </div>
             <div class="message coo">
                 coo. i am a pigeon on a roof. what do you want.
@@ -435,79 +537,246 @@
             </div>
         </div>
 
-        <div class="input-area">
-            <div class="input-wrapper">
-                <input type="text" id="userInput" placeholder="Say something to Coo..." autocomplete="off" onkeypress="handleKeyPress(event)">
+        <!-- FIND-023: the send area is a real form; Enter still submits. -->
+        <form class="input-area" id="chatForm">
+            <div class="input-row">
+                <label class="visually-hidden" for="userInput">Type a message for Coo</label>
+                <div class="input-wrapper">
+                    <input type="text" id="userInput" placeholder="Say something to Coo..." autocomplete="off" aria-label="Type a message for Coo">
+                </div>
+                <button type="submit" id="sendBtn" aria-label="Send message">Send</button>
             </div>
-            <button onclick="sendMessage()">Send</button>
-        </div>
-    </div>
+            <!-- FIND-006: early, non-blocking feedback for long messages. -->
+            <p class="input-hint" id="lengthHint" hidden>
+                long messages are trimmed to the model's 64-token context window — the tail is kept
+            </p>
+        </form>
+    </main>
 
     <script>
         const chatBox = document.getElementById('chatBox');
         const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const chatForm = document.getElementById('chatForm');
+        const lengthHint = document.getElementById('lengthHint');
+        const serverStatus = document.getElementById('serverStatus');
+        const statusDot = document.getElementById('statusDot');
+        const statusLabel = document.getElementById('statusLabel');
+        const systemMsg = document.getElementById('systemMsg');
 
-        function addMessage(text, sender) {
+        // FIND-022: generation can be slow on CPU — generous timeout, with a
+        // "still generating" note after 15s so the wait is never silent.
+        const REQUEST_TIMEOUT_MS = 120000;
+        const SLOW_HINT_MS = 15000;
+        const HEALTH_TIMEOUT_MS = 5000;
+        // FIND-045: only autoscroll when already near the bottom (or when the
+        // user sent the message), and cap the message DOM in long sessions.
+        const NEAR_BOTTOM_PX = 80;
+        const MAX_MESSAGES = 300;
+        // FIND-006: early, non-blocking feedback for long inputs.
+        const LONG_INPUT_CHARS = 1800;
+
+        // Server-reported context window (updated by the /health probe).
+        let modelMaxSeqLen = 64;
+        // FIND-022: only one request in flight at a time.
+        let isBusy = false;
+
+        function prefersReducedMotion() {
+            // FIND-023: the pill physics loop consults this every frame.
+            return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        }
+
+        function isNearBottom() {
+            return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < NEAR_BOTTOM_PX;
+        }
+
+        function appendMessage(node, shouldScroll) {
+            chatBox.appendChild(node);
+            // FIND-045: bound the DOM in long sessions.
+            while (chatBox.children.length > MAX_MESSAGES) {
+                chatBox.removeChild(chatBox.firstElementChild);
+            }
+            if (shouldScroll) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        // shouldScroll: true = force (user's own message), false = only when
+        // near bottom, undefined = only when near bottom. All text is set via
+        // textContent — user/model text is never parsed as HTML.
+        function addMessage(text, sender, shouldScroll) {
             const div = document.createElement('div');
             div.className = `message ${sender}`;
             div.textContent = text;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            appendMessage(div, shouldScroll === true || (shouldScroll === undefined && isNearBottom()));
             return div;
         }
 
         function showTyping() {
             const div = document.createElement('div');
             div.className = 'message coo typing';
+            div.setAttribute('role', 'status');
+            div.setAttribute('aria-live', 'polite');
+            div.setAttribute('aria-label', 'Coo is typing');
             div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            appendMessage(div, isNearBottom());
             return div;
         }
 
-        async function triggerInference(text, typingIndicator) {
+        function removeTyping(indicator) {
+            if (indicator && indicator.parentNode === chatBox) {
+                chatBox.removeChild(indicator);
+            }
+        }
+
+        // FIND-021: the badge mirrors the real engine state.
+        function setEngineStatus(online, note) {
+            serverStatus.classList.remove('checking', 'offline');
+            statusDot.classList.remove('checking', 'offline');
+            if (online) {
+                statusLabel.textContent = 'Active Engine';
+                systemMsg.textContent = 'Model running locally via Python server (ONNX Inference).';
+            } else {
+                serverStatus.classList.add('offline');
+                statusDot.classList.add('offline');
+                statusLabel.textContent = 'Server Offline';
+                systemMsg.textContent = 'server not reachable — start it with chat.bat or python -m tools.server' + (note ? ' (' + note + ')' : '');
+            }
+        }
+
+        async function probeEngine() {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+            try {
+                const response = await fetch('/health', { signal: controller.signal });
+                if (!response.ok) {
+                    throw new Error('health endpoint returned HTTP ' + response.status);
+                }
+                const data = await response.json();
+                if (data && data.engine === true) {
+                    if (typeof data.max_seq_len === 'number' && data.max_seq_len > 0) {
+                        modelMaxSeqLen = data.max_seq_len;
+                        updateLengthHintText();
+                    }
+                    setEngineStatus(true);
+                } else {
+                    setEngineStatus(false, 'server is up but the engine is not loaded');
+                }
+            } catch (e) {
+                setEngineStatus(false);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        function updateLengthHintText() {
+            lengthHint.textContent = `long messages are trimmed to the model's ${modelMaxSeqLen}-token context window — the tail is kept`;
+        }
+
+        function setInputEnabled(enabled) {
+            userInput.disabled = !enabled;
+            sendBtn.disabled = !enabled;
+        }
+
+        async function triggerInference(text) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+            const typingIndicator = showTyping();
+            const slowHintId = setTimeout(() => {
+                addMessage('still generating... (CPU inference can take a while)', 'system-msg', false);
+            }, SLOW_HINT_MS);
+
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text })
+                    body: JSON.stringify({ text: text }),
+                    signal: controller.signal
                 });
-                
+
                 if (!response.ok) {
-                    throw new Error("Server response wasn't OK");
+                    throw new Error('server response wasn\'t OK (HTTP ' + response.status + ')');
                 }
-                
-                const data = await response.json();
-                chatBox.removeChild(typingIndicator);
+
+                // FIND-046: validate the response contract — a 200 without a
+                // string "response" field (or a non-JSON body) must surface a
+                // clear error, never an empty bubble.
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    throw new Error('server returned an unexpected response (body was not JSON)');
+                }
+                if (!data || typeof data.response !== 'string') {
+                    throw new Error('server returned an unexpected response (no "response" field)');
+                }
+
+                removeTyping(typingIndicator);
                 addMessage(data.response, 'coo');
             } catch (e) {
-                chatBox.removeChild(typingIndicator);
-                addMessage("coo (error): " + e.message + ". Make sure you started the local server using chat.bat!", 'coo');
+                removeTyping(typingIndicator);
+                if (e.name === 'AbortError') {
+                    addMessage('coo (error): the request timed out after ' + (REQUEST_TIMEOUT_MS / 1000) + 's. The model may still be generating on CPU — try again in a moment.', 'coo');
+                } else if (e instanceof TypeError) {
+                    // fetch network failure: the server is not reachable.
+                    setEngineStatus(false);
+                    addMessage('coo (error): could not reach the local server. Start it with chat.bat or python -m tools.server, then reload this page.', 'coo');
+                } else {
+                    addMessage('coo (error): ' + e.message + ' Make sure the local server is running (chat.bat or python -m tools.server).', 'coo');
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                clearTimeout(slowHintId);
+                isBusy = false;
+                setInputEnabled(true);
+                userInput.focus();
             }
         }
 
         async function sendMessage() {
+            if (isBusy) return;
             const text = userInput.value.trim();
             if (!text) return;
 
-            addMessage(text, 'user');
+            isBusy = true;
+            setInputEnabled(false);
+            addMessage(text, 'user', true);
             userInput.value = '';
-            
-            const typingIndicator = showTyping();
-            await triggerInference(text, typingIndicator);
+            lengthHint.hidden = true;
+
+            await triggerInference(text);
         }
 
         async function sendSuggestion(text) {
-            addMessage(text, 'user');
-            const typingIndicator = showTyping();
-            await triggerInference(text, typingIndicator);
+            if (isBusy) return;
+            isBusy = true;
+            setInputEnabled(false);
+            addMessage(text, 'user', true);
+
+            await triggerInference(text);
         }
 
-        function handleKeyPress(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            sendMessage();
+        });
+
+        // FIND-023: keydown instead of the deprecated onkeypress, and never
+        // send while an IME composition is in progress.
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                if (typeof chatForm.requestSubmit === 'function') {
+                    chatForm.requestSubmit();
+                } else {
+                    sendMessage();
+                }
             }
-        }
+        });
+
+        userInput.addEventListener('input', () => {
+            lengthHint.hidden = userInput.value.trim().length <= LONG_INPUT_CHARS;
+        });
 
         const ALL_PROMPTS = [
             "why do humans honk so much",
@@ -637,6 +906,14 @@
         let floatingPills = []; // array of { element, x, y, vx, vy, w, h, sidebar }
 
         function updatePhysics() {
+            // FIND-023: reduced motion stops the simulation loop entirely.
+            if (prefersReducedMotion()) return;
+            // FIND-048: no simulation work while the tab is hidden (rAF is
+            // throttled to zero there; the loop resumes when visible again).
+            if (document.hidden) {
+                requestAnimationFrame(updatePhysics);
+                return;
+            }
             const sidebars = {
                 'left': document.getElementById('suggestionsLeft'),
                 'right': document.getElementById('suggestionsRight')
@@ -745,9 +1022,27 @@
         }
 
         // Initial render, set intervals, start physics loop
+        probeEngine();
         displayFloatingPrompts();
-        setInterval(displayFloatingPrompts, 30000);
-        requestAnimationFrame(updatePhysics);
+        // FIND-048: don't recreate pills while the tab is hidden.
+        setInterval(() => {
+            if (!document.hidden) displayFloatingPrompts();
+        }, 30000);
+        // FIND-023: no rAF loop at all under prefers-reduced-motion.
+        if (!prefersReducedMotion()) {
+            requestAnimationFrame(updatePhysics);
+        }
+        if (window.matchMedia) {
+            const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+            if (motionQuery.addEventListener) {
+                motionQuery.addEventListener('change', (e) => {
+                    // Restart the loop only when reduced motion is turned off.
+                    if (!e.matches && !document.hidden) {
+                        requestAnimationFrame(updatePhysics);
+                    }
+                });
+            }
+        }
     </script>
 </body>
 </html>

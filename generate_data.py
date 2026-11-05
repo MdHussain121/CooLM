@@ -1,6 +1,7 @@
 import random
 import json
 import re
+import pathlib
 
 random.seed(42)
 
@@ -2176,6 +2177,10 @@ def generate_dataset(n=500000):
 
     samples = []
     seen_inputs = set()
+    # FIND-036: telemetry only — count (and loudly report) the rare case
+    # where the 100-collision retry loop gives up and a duplicate input is
+    # emitted anyway. No generation logic, seeding, or output content changes.
+    cap_exhaustions = 0
     for _ in range(n):
         attempts = 0
         while attempts < 100:
@@ -2186,6 +2191,10 @@ def generate_dataset(n=500000):
                 seen_inputs.add(question)
                 break
             attempts += 1
+        else:
+            cap_exhaustions += 1
+            print(f"warning: uniqueness retry cap exhausted after 100 attempts; "
+                  f"emitting duplicate input: {question!r}")
 
         response = add_fluff(topic_fn())
         category = CATEGORIES[topic_name]
@@ -2194,27 +2203,30 @@ def generate_dataset(n=500000):
             "output": response,
             "category": category,
         })
-    return samples
+    return samples, cap_exhaustions
 
 
 def main():
     import sys
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 500000
     print(f"generating {n} samples...")
-    data = generate_dataset(n)
+    data, cap_exhaustions = generate_dataset(n)
 
     from collections import Counter
     cat_counts = Counter(s["category"] for s in data)
     total = len(data)
 
-    with open("pigeon_data.jsonl", "w", encoding="utf-8") as f:
-        for sample in data:
-            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+    out_path = pathlib.Path("pigeon_data.jsonl")
+    out_path.write_text(
+        "".join(json.dumps(sample, ensure_ascii=False) + "\n" for sample in data),
+        encoding="utf-8",
+    )
 
     print(f"saved {total} samples to pigeon_data.jsonl")
     print(f"categories ({len(cat_counts)}):")
     for cat, count in sorted(cat_counts.items()):
         print(f"  {cat}: {count} ({count/total*100:.1f}%)")
+    print(f"uniqueness retry cap exhaustions (duplicate inputs emitted): {cap_exhaustions}")
 
 
 if __name__ == "__main__":

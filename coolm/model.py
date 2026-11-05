@@ -1,4 +1,5 @@
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -106,7 +107,34 @@ class CooLM(nn.Module):
 
     def forward(self, input_ids, targets=None, use_cache=False, kv_caches=None, start_pos=0):
         B, T = input_ids.shape
-        assert T + start_pos <= self.config.max_seq_len
+        assert (
+            T + start_pos <= self.config.max_seq_len
+        ), (
+            f"input length {T} + start_pos {start_pos} exceeds max_seq_len "
+            f"{self.config.max_seq_len}"
+        )
+        if kv_caches is not None:
+            # FIND-035: cover the cache state too — an overflowing call used
+            # to slip past this assert and die later inside attention with an
+            # obscure broadcast error. Positions are absolute: the cache
+            # holds positions 0..cached_len-1, so the new tokens must anchor
+            # exactly at the cache end (every generate() call site does).
+            # Together these two checks reject any call where
+            # cached_len + T + start_pos overflows or mis-anchors.
+            cached_len = kv_caches[0][0].shape[-2]
+            assert (
+                cached_len + T <= self.config.max_seq_len
+            ), (
+                f"kv cache overflow: cached_len {cached_len} + new tokens {T} "
+                f"exceeds max_seq_len {self.config.max_seq_len}"
+            )
+            assert (
+                start_pos == cached_len
+            ), (
+                f"inconsistent start_pos {start_pos} with kv cache of length "
+                f"{cached_len}; new tokens must anchor at the cache end "
+                f"(start_pos == cached_len)"
+            )
 
         tok_emb = self.token_embedding(input_ids)
         pos = torch.arange(start_pos, start_pos + T, device=input_ids.device)
@@ -133,63 +161,159 @@ class CooLM(nn.Module):
         return logits, loss, new_kv_caches
 
     @torch.no_grad()
-    def generate(self, input_ids, max_new_tokens=64, temperature=1.0, top_k=40):
+    def generate(self, input_ids, max_new_tokens=64, temperature=1.0, top_k=40, seed=None):
+        """Autoregressive generation. Inference-only API; the audited
+        forward()/Attention/FFN math is used unchanged.
+
+        Contract:
+        - Returns the FULL sequence ``prompt + generated tokens`` with shape
+          ``(B, prompt_len + generated)``. The sliding window below bounds
+          what the model *sees*, never what the caller gets back: the return
+          value is never truncated (FIND-001).
+        - ``max_new_tokens <= 0`` returns ``input_ids`` unchanged (out of
+          place; nothing is appended or truncated) (FIND-029).
+        - ``temperature == 0`` means greedy decoding (argmax — deterministic,
+          the standard convention). ``temperature < 0`` or non-finite raises
+          ``ValueError``; non-numeric arguments raise ``TypeError`` (bools
+          are rejected everywhere) (FIND-009).
+        - ``top_k <= 0`` disables top-k filtering; ``top_k > vocab_size`` is
+          clamped silently.
+        - Batched EOS (FIND-030): each row stops independently once it
+          samples ``config.eos_token_id`` — the EOS itself is that row's last
+          content token; afterwards the row appends ``config.pad_token_id``
+          so it produces no further content. Generation stops early only
+          when ALL rows are finished, so the output shape stays uniform.
+        - Sliding window (FIND-051): once the KV window is full it is
+          rebuilt from the most recent ``max_seq_len`` tokens with positions
+          re-anchored to ``0 .. max_seq_len-1`` (audit-verified rebuild
+          math, preserved exactly).
+        - ``forward`` raises ``AssertionError`` if the KV window would
+          overflow ``max_seq_len`` (FIND-035).
+        - ``seed`` (FIND-034): when set (int), the global torch RNG is
+          seeded before sampling, making the sampled tokens reproducible;
+          ``None`` (default) keeps the previous unseeded behavior. Must be
+          an int (bools rejected like the other arguments).
+        """
+        # Validate before touching any module state: invalid arguments must
+        # not even toggle eval mode (pairs with the try/finally below).
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int):
+            raise TypeError(
+                f"max_new_tokens must be an int, got {type(max_new_tokens).__name__}"
+            )
+        if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+            raise TypeError(
+                f"temperature must be a real number, got {type(temperature).__name__}"
+            )
+        if not math.isfinite(temperature) or temperature < 0:
+            raise ValueError(
+                f"temperature must be a finite non-negative number, got {temperature!r}; "
+                "use temperature=0 for greedy decoding"
+            )
+        if isinstance(top_k, bool) or not isinstance(top_k, int):
+            raise TypeError(f"top_k must be an int, got {type(top_k).__name__}")
+        if top_k < 0:
+            raise ValueError(f"top_k must be >= 0, got {top_k}")
+        if seed is not None:
+            if isinstance(seed, bool) or not isinstance(seed, int):
+                raise TypeError(f"seed must be an int or None, got {type(seed).__name__}")
+            # FIND-034: reproducible sampling. Seeds the global torch RNG
+            # (documented side effect); greedy decoding ignores it.
+            torch.manual_seed(seed)
+            if input_ids.is_cuda:
+                torch.cuda.manual_seed_all(seed)
+
+        if max_new_tokens <= 0:
+            # FIND-029: a no-op request returns the prompt unchanged.
+            # generate() never mutates input_ids, so this is out of place.
+            return input_ids
+
+        max_len = self.config.max_seq_len
+        eos_id = self.config.eos_token_id
+        pad_id = self.config.pad_token_id
+
         was_training = self.training
-        self.eval()
+        try:
+            self.eval()
 
-        if input_ids.size(1) > self.config.max_seq_len:
-            input_ids = input_ids[:, -self.config.max_seq_len:]
+            # FIND-001: `full` is the immutable accumulator that is returned;
+            # `window` is the bounded view the model actually consumes. Both
+            # only ever grow by concatenation — the window is sliced for the
+            # model's benefit, the return value never is.
+            full = input_ids
+            window = input_ids[:, -max_len:]
 
-        curr_len = input_ids.size(1)
-        logits, _, kv_caches = self.forward(input_ids, use_cache=True, start_pos=0)
+            logits, _, kv_caches = self.forward(window, use_cache=True, start_pos=0)
+            next_id = self._sample_token(logits[:, -1, :], temperature, top_k)
 
-        logits = logits[:, -1, :] / temperature
+            # FIND-030: per-row EOS state — no .item(), so any batch works.
+            finished = next_id.squeeze(-1) == eos_id  # (B,) bool
+            full = torch.cat([full, next_id], dim=1)
+            window = torch.cat([window, next_id], dim=1)
+            if bool(finished.all()):
+                return full
+
+            # Invariant at the top of each step: the KV cache holds
+            # window[:, :-1] and curr_len == window.size(1) - 1.
+            curr_len = window.size(1) - 1
+            for _ in range(max_new_tokens - 1):
+                if curr_len >= max_len:
+                    # Window rebuild — audit-verified math, kept exactly:
+                    # re-prefill on window[:-1] at start_pos=0, then step
+                    # window[-1:] at start_pos=max_len-1.
+                    #
+                    # FIND-051: the window tokens are positionally
+                    # RE-ANCHORED to 0..max_len-1 — the model re-reads the
+                    # most recent tokens as if they started the sequence.
+                    # This bounds what the model sees; `full` above still
+                    # carries every token for the return value.
+                    window = window[:, -max_len:]
+                    logits, _, kv_caches = self.forward(
+                        window[:, :-1], use_cache=True, start_pos=0
+                    )
+                    curr_len = max_len - 1
+                    logits, _, kv_caches = self.forward(
+                        window[:, -1:], use_cache=True,
+                        kv_caches=kv_caches, start_pos=curr_len
+                    )
+                else:
+                    logits, _, kv_caches = self.forward(
+                        window[:, -1:], use_cache=True,
+                        kv_caches=kv_caches, start_pos=curr_len
+                    )
+
+                curr_len += 1
+
+                next_id = self._sample_token(logits[:, -1, :], temperature, top_k)
+                eos_hit = next_id.squeeze(-1) == eos_id
+                append = next_id.clone()
+                # Rows that were already finished append pad (no further
+                # content); rows finishing on THIS step keep their sampled
+                # EOS as their final content token.
+                append[finished] = pad_id
+                finished = finished | eos_hit
+                full = torch.cat([full, append], dim=1)
+                window = torch.cat([window, append], dim=1)
+                if bool(finished.all()):
+                    break
+
+            return full
+        finally:
+            # FIND-038: never leak eval mode over the caller's state.
+            if was_training:
+                self.train()
+
+    def _sample_token(self, logits, temperature, top_k):
+        """Sample one next token per row from (B, vocab) logits."""
+        if temperature == 0:
+            # FIND-009: temperature=0 is greedy decoding by convention; no
+            # probability distribution is built, so no NaN/Inf can occur.
+            return logits.argmax(dim=-1, keepdim=True)
+        # Denominators below ~1e-6 saturate fp32 logits to inf, which would
+        # turn the softmax into NaN; floor them to keep the distribution
+        # finite (a floored temperature is effectively greedy anyway).
+        logits = logits / max(temperature, 1e-6)
         if top_k > 0:
             v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
             logits[logits < v[:, -1:]] = float("-inf")
-
         probs = F.softmax(logits, dim=-1)
-        next_id = torch.multinomial(probs, num_samples=1)
-        input_ids = torch.cat([input_ids, next_id], dim=1)
-
-        if next_id.item() == self.config.eos_token_id:
-            if was_training:
-                self.train()
-            return input_ids
-
-        for _ in range(max_new_tokens - 1):
-            if curr_len >= self.config.max_seq_len:
-                # Truncate and rebuild cache from scratch
-                input_ids = input_ids[:, -self.config.max_seq_len:]
-                # Build cache from all but last token, then step the last token
-                logits, _, kv_caches = self.forward(
-                    input_ids[:, :-1], use_cache=True, start_pos=0
-                )
-                curr_len = self.config.max_seq_len - 1
-                logits, _, kv_caches = self.forward(
-                    input_ids[:, -1:], use_cache=True,
-                    kv_caches=kv_caches, start_pos=curr_len
-                )
-            else:
-                logits, _, kv_caches = self.forward(
-                    next_id, use_cache=True,
-                    kv_caches=kv_caches, start_pos=curr_len
-                )
-
-            curr_len += 1
-
-            logits = logits[:, -1, :] / temperature
-            if top_k > 0:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, -1:]] = float("-inf")
-
-            probs = F.softmax(logits, dim=-1)
-            next_id = torch.multinomial(probs, num_samples=1)
-            input_ids = torch.cat([input_ids, next_id], dim=1)
-
-            if next_id.item() == self.config.eos_token_id:
-                break
-
-        if was_training:
-            self.train()
-        return input_ids
+        return torch.multinomial(probs, num_samples=1)
