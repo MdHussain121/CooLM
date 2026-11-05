@@ -29,6 +29,15 @@ if errorlevel 1 (
     set "PY=py"
 )
 
+rem ---- Guard: Python 3.10 or newer is required (torch 2.x, tokenizers) ----
+%PY% -c "import sys; raise SystemExit(sys.version_info < (3, 10))" >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Python 3.10 or newer is required.
+    %PY% --version
+    pause
+    exit /b 1
+)
+
 rem ---- Dependencies: only install when the imports are missing ----
 %PY% -c "import torch, onnxruntime, tokenizers" >nul 2>&1
 if errorlevel 1 (
